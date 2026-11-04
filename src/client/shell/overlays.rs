@@ -39,9 +39,10 @@ pub(crate) fn render_client_overlay(
     s: &ClientShellSnapshot,
     endpoints: &[ClientShellEndpoint],
     active_endpoint_id: &ClientEndpointId,
-    k: &LiveKeybindConfig,
-    p: &Palette,
+    config: &ClientShellConfig,
 ) -> Option<OverlayRender> {
+    let k = &config.keybinds;
+    let p = &config.palette;
     if !matches!(
         o,
         ClientShellOverlay::Navigator(_)
@@ -63,7 +64,7 @@ pub(crate) fn render_client_overlay(
         }
         ClientShellOverlay::Rename(v) => render_rename_overlay(b, v, p),
         ClientShellOverlay::ConfirmClose(v) => render_confirm_close_overlay(b, v, p),
-        ClientShellOverlay::Help(v) => render_help_overlay(b, v, k, p),
+        ClientShellOverlay::Help(v) => render_help_overlay(b, v, k, p, config.zellij_keymap),
         ClientShellOverlay::Navigator(v) => {
             render_navigator_overlay(b, v, endpoints, active_endpoint_id, p)
         }
@@ -1054,11 +1055,16 @@ fn help_lines(
     keybinds: &LiveKeybindConfig,
     query: &str,
     palette: &Palette,
+    zellij_keymap: bool,
 ) -> Vec<(usize, ratatui::text::Line<'static>)> {
     use ratatui::text::{Line, Span};
 
     let groups = crate::input::filter_keybind_help_groups(
-        crate::input::keybind_help_groups(&keybinds.keybinds, &keybinds.prefix),
+        if zellij_keymap {
+            super::super::zellij_keymap::help_groups()
+        } else {
+            crate::input::keybind_help_groups(&keybinds.keybinds, &keybinds.prefix)
+        },
         query,
     );
     let key_width = groups
@@ -1119,6 +1125,7 @@ fn render_help_overlay(
     h: &ClientHelpOverlay,
     k: &LiveKeybindConfig,
     p: &Palette,
+    zellij_keymap: bool,
 ) -> Option<OverlayRender> {
     use ratatui::widgets::{Paragraph, Widget, Wrap};
 
@@ -1179,7 +1186,7 @@ fn render_help_overlay(
     };
 
     let body = Rect::new(i.x, i.y + 3, i.width, i.height.saturating_sub(5));
-    let lines = help_lines(k, &h.query, p);
+    let lines = help_lines(k, &h.query, p, zellij_keymap);
     let viewport_rows = usize::from(body.height.max(1));
     let wrapped_rows = |width: u16| {
         let width = usize::from(width.max(1));

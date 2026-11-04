@@ -83,6 +83,12 @@ pub(super) fn render_mode_bar(
         ]);
     } else {
         match mode {
+            ClientShellMode::Zellij(mode) => {
+                segments.extend([
+                    (format!(" {} ", mode.label()), mode_style),
+                    (mode.hint().to_owned(), key),
+                ]);
+            }
             ClientShellMode::Prefix => {
                 segments.extend([
                     (" PREFIX ".to_owned(), mode_style),

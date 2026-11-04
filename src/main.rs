@@ -235,6 +235,8 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 # directory = "~/.herdr/worktrees"
 
 [ui]
+# Use local modal controls: ctrl+t tabs, ctrl+p panes, alt+hjkl focus, F1 help.
+# zellij_keymap = false
 # Sidebar width (auto-scaled based on workspace names, this sets the default)
 # sidebar_width = 26
 

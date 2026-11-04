@@ -948,7 +948,7 @@ impl ClientShellState {
         if self.config.mouse_capture
             && !self.replaying_url_click
             && self.overlay.is_none()
-            && self.mode == ClientShellMode::Terminal
+            && self.terminal_input_mode()
             && mouse.kind == MouseEventKind::Down(MouseButton::Left)
             && mouse
                 .modifiers
@@ -1006,7 +1006,7 @@ impl ClientShellState {
             return;
         }
         if self.overlay.is_none()
-            && self.mode == ClientShellMode::Terminal
+            && self.terminal_input_mode()
             && self
                 .visible_notification
                 .as_ref()

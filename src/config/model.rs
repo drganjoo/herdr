@@ -937,6 +937,8 @@ impl<'de> Deserialize<'de> for PaneBordersConfig {
 #[derive(Debug, Deserialize)]
 #[serde(default)]
 pub struct UiConfig {
+    /// Use the local Zellij-style modal keymap. Default: false.
+    pub zellij_keymap: bool,
     pub sidebar_width: u16,
     /// Minimum sidebar width (columns) when expanded. Default: 18.
     pub sidebar_min_width: u16,
@@ -1198,6 +1200,7 @@ impl Default for WorktreesConfig {
 impl Default for UiConfig {
     fn default() -> Self {
         Self {
+            zellij_keymap: false,
             sidebar_width: 26,
             sidebar_min_width: 18,
             sidebar_max_width: 36,

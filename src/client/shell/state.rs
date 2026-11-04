@@ -13,6 +13,7 @@ pub(crate) enum ClientShellKeybindingSource {
 }
 
 pub(crate) struct ClientShellConfig {
+    pub(super) zellij_keymap: bool,
     pub(super) sidebar_width: u16,
     pub(super) sidebar_min_width: u16,
     pub(super) sidebar_max_width: u16,
@@ -270,6 +271,7 @@ pub(crate) struct ClientShellInput {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum ClientShellMode {
     Terminal,
+    Zellij(super::zellij_keymap::Mode),
     Prefix,
     Navigate,
     Resize,

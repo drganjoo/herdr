@@ -91,10 +91,25 @@ fn push_host_theme_update(
 }
 
 impl ClientShellState {
+    pub(super) fn terminal_input_mode(&self) -> bool {
+        matches!(
+            self.mode,
+            ClientShellMode::Terminal | ClientShellMode::Zellij(super::zellij_keymap::Mode::Locked)
+        )
+    }
+
     pub(crate) fn host_keyboard_report_all_requested(&self) -> bool {
         matches!(
             self.mode,
-            ClientShellMode::Prefix | ClientShellMode::Navigate
+            ClientShellMode::Prefix
+                | ClientShellMode::Navigate
+                | ClientShellMode::Zellij(
+                    super::zellij_keymap::Mode::Pane
+                        | super::zellij_keymap::Mode::Tab
+                        | super::zellij_keymap::Mode::Resize
+                        | super::zellij_keymap::Mode::Move
+                        | super::zellij_keymap::Mode::Session
+                )
         )
     }
 
@@ -118,7 +133,7 @@ impl ClientShellState {
     fn host_text_commit(&self, key: &crate::input::TerminalKey) -> Option<String> {
         if !self.host_reports_all_keys
             || key.kind != KeyEventKind::Press
-            || self.mode != ClientShellMode::Terminal
+            || !self.terminal_input_mode()
             || self.overlay.is_some()
         {
             return None;
@@ -271,7 +286,7 @@ impl ClientShellState {
                     } else if !self.popup_pending {
                         if self.insert_overlay_text(&text) {
                             outcome.repaint = true;
-                        } else if self.overlay.is_none() && self.mode == ClientShellMode::Terminal {
+                        } else if self.overlay.is_none() && self.terminal_input_mode() {
                             self.push_focused_pane_event(
                                 ClientPaneInputEvent::TextCommit(text),
                                 &mut outcome,
@@ -304,7 +319,7 @@ impl ClientShellState {
                     } else if !self.popup_pending {
                         if self.insert_overlay_text(&text) {
                             outcome.repaint = true;
-                        } else if self.overlay.is_none() && self.mode == ClientShellMode::Terminal {
+                        } else if self.overlay.is_none() && self.terminal_input_mode() {
                             self.push_focused_pane_event(
                                 ClientPaneInputEvent::Paste(text),
                                 &mut outcome,
@@ -668,8 +683,16 @@ impl ClientShellState {
             outcome.repaint = true;
         }
 
+        if self.route_zellij_key(key, outcome) {
+            return None;
+        }
+
         match self.mode {
+            ClientShellMode::Zellij(_) => self.focused_pane_id().map(ClientInputTarget::Pane),
             ClientShellMode::Terminal => {
+                if self.config.zellij_keymap {
+                    return self.focused_pane_id().map(ClientInputTarget::Pane);
+                }
                 if let Some(binding) =
                     crate::input::resolve_direct_binding(&self.config.keybinds.keybinds, key)
                 {
@@ -1116,7 +1139,7 @@ impl ClientShellState {
                 terminal_id,
             ));
         }
-        if self.popup_pending || self.overlay.is_some() || self.mode != ClientShellMode::Terminal {
+        if self.popup_pending || self.overlay.is_some() || !self.terminal_input_mode() {
             return None;
         }
         self.focused_pane_id()

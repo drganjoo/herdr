@@ -77,6 +77,9 @@ impl ClientShellState {
                     &loaded.diagnostics,
                     &loaded.invalid_sections,
                 );
+                if !self.config.zellij_keymap && matches!(self.mode, ClientShellMode::Zellij(_)) {
+                    self.mode = ClientShellMode::Terminal;
+                }
                 if let Some(appearance) = self.host_appearance {
                     self.config.palette = crate::app::client_palette_for_appearance(
                         &self.config.theme_runtime,
@@ -145,6 +148,7 @@ impl ClientShellConfig {
             local_keys: config.keys.clone(),
             keybinding_source: ClientShellKeybindingSource::Local,
             prompt_new_tab_name: config.ui.prompt_new_tab_name,
+            zellij_keymap: config.ui.zellij_keymap,
             prompt_new_workspace_name: config.ui.prompt_new_workspace_name,
             confirm_close: config.ui.confirm_close,
             mouse_capture: config.ui.mouse_capture,
@@ -340,6 +344,7 @@ impl ClientShellConfig {
                 diagnostics.push(format!("{diagnostic}; keeping previous [ui] settings"));
             } else {
                 let ui = &config.ui;
+                self.zellij_keymap = ui.zellij_keymap;
                 diagnostics.extend(ui.sound.diagnostics());
                 self.sidebar_width = ui.sidebar_width;
                 self.sidebar_min_width = ui.sidebar_min_width;

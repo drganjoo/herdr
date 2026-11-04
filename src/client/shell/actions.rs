@@ -670,7 +670,7 @@ impl ClientShellState {
                         == crossterm::event::MouseEventKind::Up(crossterm::event::MouseButton::Left)
                 });
                 let replay = (self.config.mouse_capture
-                    && self.mode == ClientShellMode::Terminal
+                    && self.terminal_input_mode()
                     && self.overlay.is_none()
                     && self
                         .hits

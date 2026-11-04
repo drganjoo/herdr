@@ -9,6 +9,45 @@ You already know this model. Jump to the [keybinding reference](/docs/configurat
 
 Herdr is mouse-native. You can click panes, tabs, workspaces, and agents, drag split borders, and use right-click menus without learning a single keybinding. Keyboard control is optional.
 
+**Zellij-style keymap**
+
+Enable a local modal keymap instead of the normal prefix bindings:
+
+```toml
+[ui]
+zellij_keymap = true
+prompt_new_tab_name = false
+```
+
+Restart the client or choose **reload config** from the global menu. This is a
+client preference, including for remote connections; it does not change the server protocol.
+
+| Shortcut | Action |
+| --- | --- |
+| `Alt+h/j/k/l` or `Alt+arrows` | Focus left/down/up/right |
+| `Ctrl+t` | Tab mode: `n` new, `h/l` or arrows switch, `1–9` select, `r` rename, `x` close, `[`/`]` move tab |
+| `Ctrl+p` | Pane mode: `h/j/k/l` or arrows focus, `n`/`r` split right, `d` split down, `x` close, `f` zoom, `c` rename, `p` cycle, `w` toggle sidebar |
+| `Ctrl+r` | Resize mode: `h/j/k/l` or arrows resize; `+`/`-` change width |
+| `Ctrl+h` | Move mode: `h/j/k/l` or arrows swap panes; `n`/`p` swap right/left |
+| `Ctrl+s` | Scroll/copy mode using Herdr's copy controls: `/` search, `v` select, `y` copy, `q` exit |
+| `Ctrl+o` | Session controls: `w` workspace navigation, `n` new workspace, `r` rename workspace, `d` detach, `c` settings, `l` reload config |
+| `Ctrl+g` | Lock/unlock: all other keys pass through to the pane |
+| `Alt+n`, `Alt+f` | Split right, toggle zoom |
+| `Alt+[`, `Alt+]` | Previous/next tab |
+| `Alt++`, `Alt+-` | Grow/shrink pane width |
+| `Ctrl+q` | Detach while keeping the session running |
+| `F1` | Show active bindings |
+
+Press `Esc`, `Enter`, or `Space` to leave tab, pane, resize, move, or session
+mode. Pressing the mode's Ctrl shortcut again also exits. Directional operations
+stay in their mode; creation, closing, renaming, and zoom return to normal input.
+Unknown command-mode keys are consumed. Use lock mode when an application needs
+the reserved Ctrl or Alt shortcuts. Popups and text dialogs own their own input.
+
+This maps Herdr's existing capabilities onto a Zellij-style workflow. Floating
+panes, Zellij plugins, and Zellij layout cycling are not provided. Scroll/copy
+uses Herdr's existing copy mode rather than duplicating Zellij's selection model.
+
 ## What the prefix is
 
 A terminal multiplexer sits between your terminal and the programs running inside it. Those programs already use most key combinations: `ctrl+c` interrupts, `ctrl+r` searches history, editors claim nearly everything else. If Herdr grabbed common keys directly, it would break the programs inside it.
