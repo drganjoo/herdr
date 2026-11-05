@@ -387,6 +387,8 @@ Agent rows accept these built-in tokens:
 - `workspace` — workspace name.
 - `tab` — tab name when available.
 - `pane` — pane name when available.
+- `pane_or_agent` — pane title or name when nonblank, otherwise the agent display name. Use `rows = [["state_icon", "pane_or_agent"]]` for a single heading with this fallback.
+- `pane_or_dir` — pane title or name when nonblank, otherwise the final component of its foreground working directory (falling back to its recorded working directory). Use `rows = [["state_icon", "pane_or_dir"], ["agent"]]` to show the pane or directory above its agent name.
 - `agent` — detected or reported agent display name.
 - `terminal_title` — latest OSC 0/2 terminal title after safety normalization.
 - `terminal_title_stripped` — the terminal title with one recognized leading activity or spinner glyph and its following whitespace removed.

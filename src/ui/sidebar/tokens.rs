@@ -57,11 +57,30 @@ pub(crate) struct AgentTokenContext<'a> {
     pub(crate) workspace: &'a str,
     pub(crate) tab: Option<&'a str>,
     pub(crate) pane: Option<&'a str>,
+    pub(crate) cwd: Option<&'a str>,
     pub(crate) agent_label: Option<&'a str>,
     pub(crate) terminal_title: Option<&'a str>,
     pub(crate) terminal_title_stripped: Option<&'a str>,
     pub(crate) canonical_agent: Option<crate::detect::Agent>,
     pub(crate) tokens: &'a std::collections::HashMap<String, String>,
+}
+
+// Snapshot paths may come from a remote machine with a different platform.
+// Borrow the final component without filesystem access or an intermediate allocation.
+fn directory_name(path: &str) -> Option<&str> {
+    if path.trim().is_empty() {
+        return None;
+    }
+    let trimmed = path.trim_end_matches(['/', '\\']);
+    if trimmed.is_empty()
+        || (trimmed.len() == 2
+            && trimmed.as_bytes()[0].is_ascii_alphabetic()
+            && trimmed.as_bytes()[1] == b':'
+            && trimmed.len() < path.len())
+    {
+        return Some(path);
+    }
+    trimmed.rsplit(['/', '\\']).next()
 }
 
 pub(crate) fn agent_rows(
@@ -93,6 +112,21 @@ pub(crate) fn agent_rows(
                             .map(|value| ResolvedTokenKind::Tab(value.to_string())),
                         AgentSidebarToken::Pane => context
                             .pane
+                            .map(|value| ResolvedTokenKind::Pane(value.to_string())),
+                        AgentSidebarToken::PaneOrAgent => context
+                            .pane
+                            .filter(|value| !value.trim().is_empty())
+                            .map(|value| ResolvedTokenKind::Pane(value.to_string()))
+                            .or_else(|| {
+                                context
+                                    .agent_label
+                                    .filter(|value| !value.trim().is_empty())
+                                    .map(|value| ResolvedTokenKind::Agent(value.to_string()))
+                            }),
+                        AgentSidebarToken::PaneOrDir => context
+                            .pane
+                            .filter(|value| !value.trim().is_empty())
+                            .or_else(|| context.cwd.and_then(directory_name))
                             .map(|value| ResolvedTokenKind::Pane(value.to_string())),
                         AgentSidebarToken::Agent => context
                             .agent_label
@@ -196,6 +230,7 @@ mod tests {
         workspace: String,
         tab: Option<String>,
         pane: Option<String>,
+        cwd: Option<String>,
         agent_label: Option<String>,
         terminal_title: Option<String>,
         terminal_title_stripped: Option<String>,
@@ -208,6 +243,7 @@ mod tests {
             workspace: "repo".into(),
             tab: None,
             pane: None,
+            cwd: None,
             agent_label: Some("pi".into()),
             terminal_title: None,
             terminal_title_stripped: None,
@@ -222,12 +258,116 @@ mod tests {
             workspace: &entry.workspace,
             tab: entry.tab.as_deref(),
             pane: entry.pane.as_deref(),
+            cwd: entry.cwd.as_deref(),
             agent_label: entry.agent_label.as_deref(),
             terminal_title: entry.terminal_title.as_deref(),
             terminal_title_stripped: entry.terminal_title_stripped.as_deref(),
             canonical_agent: entry.canonical_agent,
             tokens: &entry.tokens,
         }
+    }
+
+    #[test]
+    fn pane_or_agent_prefers_a_title_and_falls_back_for_missing_or_blank_titles() {
+        let config: AgentsSidebarConfig =
+            toml::from_str(r#"rows = [["state_icon", "pane_or_agent"]]"#).unwrap();
+        for (pane, agent_label, expected) in [
+            (
+                Some("serde-sol"),
+                Some("codex"),
+                Some(ResolvedTokenKind::Pane("serde-sol".into())),
+            ),
+            (
+                Some("serde-sol"),
+                None,
+                Some(ResolvedTokenKind::Pane("serde-sol".into())),
+            ),
+            (
+                None,
+                Some("reviewer"),
+                Some(ResolvedTokenKind::Agent("reviewer".into())),
+            ),
+            (
+                Some(""),
+                Some("codex"),
+                Some(ResolvedTokenKind::Agent("codex".into())),
+            ),
+            (
+                Some(" \t"),
+                Some("codex"),
+                Some(ResolvedTokenKind::Agent("codex".into())),
+            ),
+            (None, None, None),
+            (Some(""), Some(" \t"), None),
+        ] {
+            let mut entry = entry();
+            entry.pane = pane.map(str::to_owned);
+            entry.agent_label = agent_label.map(str::to_owned);
+            let mut expected_row = vec![ResolvedToken::unstyled(ResolvedTokenKind::StateIcon)];
+            if let Some(kind) = expected {
+                expected_row.push(ResolvedToken::unstyled(kind));
+            }
+            assert_eq!(
+                agent_rows(&config, context(&entry), "idle"),
+                vec![expected_row]
+            );
+        }
+    }
+
+    #[test]
+    fn pane_or_dir_keeps_agent_on_its_own_line() {
+        let config: AgentsSidebarConfig = toml::from_str(
+            r#"rows = [["state_icon", { token = "pane_or_dir", rules = [{ equals = "repo", bold = true }] }], ["agent"]]"#,
+        ).unwrap();
+        for (pane, cwd, expected) in [
+            (Some("review"), Some("/projects/repo"), Some("review")),
+            (Some("review"), None, Some("review")),
+            (None, Some("/projects/repo"), Some("repo")),
+            (Some(" \t"), Some("/projects/repo/"), Some("repo")),
+            (None, Some(r"C:\projects\repo\"), Some("repo")),
+            (None, Some(r"\\server\share\repo"), Some("repo")),
+            (None, Some("/"), Some("/")),
+            (None, Some(r"C:\"), Some(r"C:\")),
+            (None, Some("/projects/项目/"), Some("项目")),
+            (None, Some(" \t"), None),
+            (None, None, None),
+        ] {
+            let mut entry = entry();
+            entry.pane = pane.map(str::to_owned);
+            entry.cwd = cwd.map(str::to_owned);
+            let rows = agent_rows(&config, context(&entry), "idle");
+            assert_eq!(
+                rows[1],
+                vec![ResolvedToken::unstyled(ResolvedTokenKind::Agent(
+                    "pi".into()
+                ))]
+            );
+            if let Some(expected) = expected {
+                assert_eq!(rows[0][1].kind, ResolvedTokenKind::Pane(expected.into()));
+                assert_eq!(rows[0][1].style.bold, (expected == "repo").then_some(true));
+            } else {
+                assert_eq!(
+                    rows[0],
+                    vec![ResolvedToken::unstyled(ResolvedTokenKind::StateIcon)]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn pane_or_agent_styles_match_the_selected_value() {
+        let config: AgentsSidebarConfig = toml::from_str(
+            r#"rows = [[{ token = "pane_or_agent", rules = [{ equals = "codex", bold = true }] }]]"#,
+        ).unwrap();
+        let mut entry = entry();
+        entry.agent_label = Some("codex".into());
+        let rows = agent_rows(&config, context(&entry), "idle");
+        assert_eq!(rows[0][0].kind, ResolvedTokenKind::Agent("codex".into()));
+        assert_eq!(rows[0][0].style.bold, Some(true));
+        entry.pane = Some("serde-sol".into());
+        let rows = agent_rows(&config, context(&entry), "idle");
+        assert_eq!(rows[0][0].kind, ResolvedTokenKind::Pane("serde-sol".into()));
+        assert_eq!(rows[0][0].style.bold, None);
     }
 
     #[test]

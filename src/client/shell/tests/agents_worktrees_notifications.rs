@@ -650,6 +650,81 @@ fn pane_cycle_last_and_agent_actions_resolve_to_stable_pane_ids() {
 }
 
 #[test]
+fn agent_sidebar_pane_or_dir_uses_the_panes_directory_and_preserves_names() {
+    let config: Config = toml::from_str(
+        r#"[ui.sidebar.agents]
+rows = [["state_icon", "pane_or_dir"], ["agent"]]
+"#,
+    )
+    .unwrap();
+    let config = ClientShellConfig::from_config(&config);
+    let mut projected = snapshot();
+    projected.agents.push(ClientShellAgent {
+        pane_id: "pane_1".into(),
+        workspace_id: "ws_1".into(),
+        tab_id: "tab_1".into(),
+        name: None,
+        display_agent: None,
+        agent: Some("codex".into()),
+        title: None,
+        terminal_title: None,
+        terminal_title_stripped: None,
+        agent_status: AgentStatus::Idle,
+        state_change_seq: 0,
+        state_labels: Vec::new(),
+        tokens: Vec::new(),
+        focused: true,
+    });
+    for (title, label, foreground_cwd, cwd, expected) in [
+        (
+            Some("derive"),
+            None,
+            Some("/projects/serde"),
+            Some("/projects/herdr"),
+            "derive",
+        ),
+        (
+            None,
+            Some("review"),
+            Some("/projects/serde"),
+            Some("/projects/herdr"),
+            "review",
+        ),
+        (
+            Some(" \t"),
+            Some("review"),
+            Some("/projects/serde"),
+            Some("/projects/herdr"),
+            "review",
+        ),
+        (
+            None,
+            None,
+            Some("/projects/serde"),
+            Some("/projects/herdr"),
+            "serde",
+        ),
+        (None, None, None, Some("/projects/herdr"), "herdr"),
+        (None, None, Some(" \t"), Some("/projects/herdr"), "herdr"),
+    ] {
+        projected.agents[0].title = title.map(str::to_owned);
+        projected.panes[0].label = label.map(str::to_owned);
+        projected.panes[0].foreground_cwd = foreground_cwd.map(str::to_owned);
+        projected.panes[0].cwd = cwd.map(str::to_owned);
+        let row =
+            super::super::agent_sidebar::agent_row(&projected, "pane_1", &config, None).unwrap();
+        assert_eq!(
+            row.rows[0][1].kind,
+            crate::ui::ResolvedTokenKind::Pane(expected.into())
+        );
+        assert_eq!(
+            row.rows[1][0].kind,
+            crate::ui::ResolvedTokenKind::Agent("codex".into())
+        );
+    }
+}
+
+#[test]
 fn agent_sidebar_honors_priority_symbols_tokens_and_stable_hits() {
     let mut projected = snapshot();
     let mut second_pane = projected.panes[0].clone();

@@ -301,7 +301,14 @@ pub(super) fn agent_row(
             pane: agent
                 .title
                 .as_deref()
+                .filter(|value| !value.trim().is_empty())
                 .or_else(|| pane.and_then(|pane| pane.label.as_deref())),
+            cwd: pane.and_then(|pane| {
+                pane.foreground_cwd
+                    .as_deref()
+                    .filter(|value| !value.trim().is_empty())
+                    .or(pane.cwd.as_deref())
+            }),
             agent_label,
             terminal_title: agent.terminal_title.as_deref(),
             terminal_title_stripped: agent.terminal_title_stripped.as_deref(),

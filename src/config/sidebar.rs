@@ -112,6 +112,8 @@ pub enum AgentSidebarToken {
     Workspace,
     Tab,
     Pane,
+    PaneOrAgent,
+    PaneOrDir,
     Agent,
     TerminalTitle,
     TerminalTitleStripped,
@@ -276,6 +278,8 @@ fn agent_token_name(token: &AgentSidebarToken) -> String {
         AgentSidebarToken::Workspace => "workspace".into(),
         AgentSidebarToken::Tab => "tab".into(),
         AgentSidebarToken::Pane => "pane".into(),
+        AgentSidebarToken::PaneOrAgent => "pane_or_agent".into(),
+        AgentSidebarToken::PaneOrDir => "pane_or_dir".into(),
         AgentSidebarToken::Agent => "agent".into(),
         AgentSidebarToken::TerminalTitle => "terminal_title".into(),
         AgentSidebarToken::TerminalTitleStripped => "terminal_title_stripped".into(),
@@ -335,6 +339,8 @@ impl<'de> Deserialize<'de> for AgentSidebarToken {
                 ("workspace", Self::Workspace),
                 ("tab", Self::Tab),
                 ("pane", Self::Pane),
+                ("pane_or_agent", Self::PaneOrAgent),
+                ("pane_or_dir", Self::PaneOrDir),
                 ("agent", Self::Agent),
                 ("terminal_title", Self::TerminalTitle),
                 ("terminal_title_stripped", Self::TerminalTitleStripped),
@@ -511,6 +517,56 @@ mod tests {
             ]
         );
         assert_eq!(config.spaces.row_gap, 0);
+    }
+
+    #[test]
+    fn pane_or_agent_config_roundtrips_in_plain_styled_and_override_rows() {
+        let config: AgentsSidebarConfig = toml::from_str(
+            r#"
+rows = [["pane_or_agent", { token = "pane_or_agent", bold = true }]]
+[rows_by_agent]
+codex = [["pane_or_agent"]]
+"#,
+        )
+        .unwrap();
+        assert_eq!(config.rows[0][0], AgentSidebarToken::PaneOrAgent);
+        let (token, style) = config.rows[0][1].parts();
+        assert_eq!(token, &AgentSidebarToken::PaneOrAgent);
+        assert_eq!(style.bold, Some(true));
+        assert_eq!(
+            config.rows_by_agent["codex"],
+            vec![vec![AgentSidebarToken::PaneOrAgent]]
+        );
+        let serialized = toml::to_string(&config).unwrap();
+        assert_eq!(
+            toml::from_str::<AgentsSidebarConfig>(&serialized).unwrap(),
+            config
+        );
+    }
+
+    #[test]
+    fn pane_or_dir_config_roundtrips_in_plain_styled_and_override_rows() {
+        let config: AgentsSidebarConfig = toml::from_str(
+            r#"
+rows = [["pane_or_dir", { token = "pane_or_dir", dim = true }]]
+[rows_by_agent]
+codex = [["pane_or_dir"]]
+"#,
+        )
+        .unwrap();
+        assert_eq!(config.rows[0][0], AgentSidebarToken::PaneOrDir);
+        let (token, style) = config.rows[0][1].parts();
+        assert_eq!(token, &AgentSidebarToken::PaneOrDir);
+        assert_eq!(style.dim, Some(true));
+        assert_eq!(
+            config.rows_by_agent["codex"],
+            vec![vec![AgentSidebarToken::PaneOrDir]]
+        );
+        let serialized = toml::to_string(&config).unwrap();
+        assert_eq!(
+            toml::from_str::<AgentsSidebarConfig>(&serialized).unwrap(),
+            config
+        );
     }
 
     #[test]

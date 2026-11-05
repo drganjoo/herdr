@@ -361,6 +361,40 @@ fn print_token_rule_profiles() {
     }
 }
 
+fn print_pane_heading_profiles() {
+    for (label, build) in [
+        ("background", workspaces as fn(usize) -> Vec<Workspace>),
+        ("active", active_panes),
+    ] {
+        for token in ["pane_or_agent", "pane_or_dir"] {
+            let config: Config = toml::from_str(&format!(
+                "[ui.sidebar.agents]\nrows = [[\"state_icon\", \"{token}\"], [\"agent\"]]"
+            ))
+            .unwrap();
+            let rows = [1, 15].map(|count| {
+                let mut pipeline = RenderPipeline::with_config(build(count), &config);
+                pipeline.app.state.ensure_test_terminals();
+                for terminal in pipeline.app.state.terminals.values_mut() {
+                    terminal.detected_agent = Some(crate::detect::Agent::Pi);
+                }
+                let mut snapshot =
+                    super::client_shell::snapshot(&pipeline.app, "bench-boot", 1, None, None);
+                for agent in &mut snapshot.agents {
+                    agent.title = None;
+                }
+                for pane in &mut snapshot.panes {
+                    pane.label = None;
+                    pane.foreground_cwd = Some("/home/bench/projects/bench-repo".into());
+                }
+                pipeline.client.set_snapshot(Box::new(snapshot));
+                (count, profile_pipeline(pipeline))
+            });
+            println!("pane headings {label}: populated agents, token={token}");
+            print_stage("client shell composition", &rows, |stats| stats.client);
+        }
+    }
+}
+
 #[derive(Clone, Copy)]
 enum SurfaceDamagePattern {
     Dense,
@@ -611,6 +645,7 @@ async fn render_scale_profile() {
     print_profiles("active panes (one workspace)", active_panes);
     print_snapshot_encoding_profiles("active panes", active_panes);
     print_token_rule_profiles();
+    print_pane_heading_profiles();
     print_surface_reuse_profiles();
     print_surface_damage_profiles();
 }
