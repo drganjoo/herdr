@@ -87,6 +87,7 @@ mod tests {
     fn completion_guard_optional_control_round_trips_without_changing_snapshot_codec() {
         let projection = crate::protocol::endpoint::EndpointAgentCompletions {
             boot_id: "boot".into(),
+            completed_at_unix_ms: Default::default(),
             revision: 3,
             completions: [("pane".into(), 7)].into_iter().collect(),
         };

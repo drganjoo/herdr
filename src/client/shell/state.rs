@@ -1832,6 +1832,15 @@ impl ClientShellState {
         true
     }
 
+    pub(crate) fn tick_completion_ages(&self, now: std::time::Instant) -> bool {
+        self.last_composed_at
+            .is_some_and(|last| now.saturating_duration_since(last).as_secs() >= 60)
+            && self
+                .endpoints
+                .iter()
+                .any(|endpoint| endpoint.agent_presentation.has_completion_times())
+    }
+
     pub(crate) fn tick_copy_feedback(&mut self, now: std::time::Instant) -> bool {
         let mut repaint = false;
         if self

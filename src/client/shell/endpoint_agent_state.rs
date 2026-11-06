@@ -8,6 +8,7 @@ pub(super) struct EndpointAgentPresentation {
     boot_id: Option<String>,
     acknowledged: HashMap<String, u64>,
     completed: HashMap<String, u64>,
+    completed_at_unix_ms: HashMap<String, u64>,
     working: HashSet<String>,
     pending_completions: Option<(
         Option<u64>,
@@ -49,6 +50,7 @@ impl EndpointAgentPresentation {
             self.boot_id = Some(snapshot.boot_id.clone());
             self.acknowledged.clear();
             self.completed.clear();
+            self.completed_at_unix_ms.clear();
             self.working.clear();
             self.acknowledged.extend(
                 snapshot
@@ -68,6 +70,8 @@ impl EndpointAgentPresentation {
             .retain(|pane_id, _| pane_ids.contains(pane_id.as_str()));
         self.working
             .retain(|pane_id| pane_ids.contains(pane_id.as_str()));
+        self.completed_at_unix_ms
+            .retain(|pane_id, _| pane_ids.contains(pane_id.as_str()));
         let completions = self
             .pending_completions
             .take()
@@ -76,7 +80,10 @@ impl EndpointAgentPresentation {
                     && projection.boot_id == snapshot.boot_id
                     && projection.revision == snapshot.revision
             })
-            .map(|(_, projection)| projection.completions);
+            .map(|(_, projection)| {
+                self.completed_at_unix_ms = projection.completed_at_unix_ms.into_iter().collect();
+                projection.completions
+            });
         for agent in &mut snapshot.agents {
             match agent.agent_status {
                 AgentStatus::Working => {
@@ -109,6 +116,9 @@ impl EndpointAgentPresentation {
                     self.working.remove(&agent.pane_id);
                     self.completed.remove(&agent.pane_id);
                 }
+            }
+            if !self.completed.contains_key(&agent.pane_id) {
+                self.completed_at_unix_ms.remove(&agent.pane_id);
             }
             agent.agent_status = self.projected_status(agent);
         }
@@ -151,6 +161,14 @@ impl EndpointAgentPresentation {
             project_aggregate_status(snapshot);
         }
         changed
+    }
+
+    pub(super) fn completed_at(&self, pane_id: &str) -> Option<u64> {
+        self.completed_at_unix_ms.get(pane_id).copied()
+    }
+
+    pub(super) fn has_completion_times(&self) -> bool {
+        !self.completed_at_unix_ms.is_empty()
     }
 
     pub(super) fn seen(&self, agent: &ClientShellAgent) -> bool {
@@ -297,6 +315,7 @@ mod tests {
     fn completions(boot: &str, revision: u64, seq: Option<u64>) -> EndpointAgentCompletions {
         EndpointAgentCompletions {
             boot_id: boot.into(),
+            completed_at_unix_ms: Default::default(),
             revision,
             completions: seq
                 .map(|seq| ("agent-pane".into(), seq))
@@ -428,10 +447,19 @@ mod tests {
         let mut initial = snapshot(AgentStatus::Working, 4, 1);
         presentation.project_snapshot(&mut initial);
         let mut completed = snapshot(AgentStatus::Idle, 5, 2);
+        let mut projection = completions("endpoint-boot", 2, Some(5));
+        projection
+            .completed_at_unix_ms
+            .insert("agent-pane".into(), 123_000);
+        presentation.receive_completions(None, projection);
         presentation.project_snapshot(&mut completed);
 
         assert!(presentation.acknowledge_surface(&mut completed, &surface(2), Some(true)));
         assert_eq!(completed.agents[0].agent_status, AgentStatus::Idle);
+        assert_eq!(presentation.completed_at("agent-pane"), Some(123_000));
+        let mut working = snapshot(AgentStatus::Working, 6, 3);
+        presentation.project_snapshot(&mut working);
+        assert_eq!(presentation.completed_at("agent-pane"), None);
     }
 
     #[test]

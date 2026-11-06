@@ -1757,3 +1757,51 @@ fn semantic_notifications_use_client_policy_and_stable_navigation_targets() {
     assert!(state.visible_notification.is_none());
     assert_eq!(state.pending_notifications.len(), 1);
 }
+
+#[test]
+fn completion_age_is_visible_in_default_agent_layout_after_acknowledgement() {
+    let config = ClientShellConfig::from_config(&Config::default());
+    let mut projected = snapshot();
+    projected.agents.push(ClientShellAgent {
+        pane_id: "pane_1".into(),
+        workspace_id: "ws_1".into(),
+        tab_id: "tab_1".into(),
+        name: None,
+        display_agent: None,
+        agent: Some("codex".into()),
+        title: None,
+        terminal_title: None,
+        terminal_title_stripped: None,
+        agent_status: AgentStatus::Idle,
+        state_change_seq: 0,
+        state_labels: Vec::new(),
+        tokens: Vec::new(),
+        focused: true,
+    });
+    let row = super::super::agent_sidebar::agent_row_with_completion(
+        &projected,
+        "pane_1",
+        &config,
+        None,
+        Some(100_000),
+        220_000,
+    )
+    .unwrap();
+    assert!(row.recently_completed);
+    assert!(row.rows.iter().flatten().any(
+        |token| token.kind == crate::ui::ResolvedTokenKind::StateText("finished 2m ago".into())
+    ));
+    let old = super::super::agent_sidebar::agent_row_with_completion(
+        &projected,
+        "pane_1",
+        &config,
+        None,
+        Some(100_000),
+        400_000,
+    )
+    .unwrap();
+    assert!(!old.recently_completed);
+    let missing =
+        super::super::agent_sidebar::agent_row(&projected, "pane_1", &config, None).unwrap();
+    assert_eq!(missing.rows.len(), config.agents.rows.len());
+}

@@ -37,6 +37,8 @@ pub struct EndpointAgentCompletions {
     pub boot_id: String,
     pub revision: u64,
     pub completions: std::collections::BTreeMap<String, u64>,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub completed_at_unix_ms: std::collections::BTreeMap<String, u64>,
 }
 
 fn default_true() -> bool {

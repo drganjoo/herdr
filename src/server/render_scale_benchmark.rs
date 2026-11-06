@@ -637,6 +637,55 @@ fn print_surface_reuse_profiles() {
     }
 }
 
+fn print_completion_age_profiles() {
+    println!("populated agents with completion ages");
+    for (label, build) in [
+        ("background", workspaces as fn(usize) -> Vec<Workspace>),
+        ("active", active_panes),
+    ] {
+        for recent in [false, true] {
+            let rows = CARDINALITIES.map(|count| {
+                let mut pipeline = RenderPipeline::new(build(count));
+                pipeline.app.state.ensure_test_terminals();
+                for terminal in pipeline.app.state.terminals.values_mut() {
+                    terminal.set_detected_state(
+                        Some(crate::detect::Agent::Pi),
+                        crate::detect::AgentState::Idle,
+                    );
+                    terminal.last_agent_state_change_seq = Some(1);
+                    terminal.last_agent_completion_seq = recent.then_some(1);
+                    terminal.last_agent_completed_at_unix_ms = recent.then(|| {
+                        std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap()
+                            .as_millis() as u64
+                    });
+                }
+                let (snapshot, completions) = super::client_shell::snapshot_with_completions(
+                    &pipeline.app,
+                    "bench-boot",
+                    1,
+                    None,
+                    None,
+                );
+                let endpoint = crate::client::endpoint::ClientEndpointId::Local;
+                pipeline
+                    .client
+                    .set_endpoint_agent_completions(&endpoint, 1, completions);
+                pipeline.client.set_endpoint_snapshot_for_generation(
+                    &endpoint,
+                    1,
+                    Box::new(snapshot),
+                );
+                (count, profile_pipeline(pipeline))
+            });
+            print_stage(&format!("{label} recent={recent}"), &rows, |stats| {
+                stats.client
+            });
+        }
+    }
+}
+
 #[tokio::test(flavor = "current_thread")]
 #[ignore = "manual client-rendered pipeline scaling profile"]
 async fn render_scale_profile() {
@@ -646,6 +695,7 @@ async fn render_scale_profile() {
     print_snapshot_encoding_profiles("active panes", active_panes);
     print_token_rule_profiles();
     print_pane_heading_profiles();
+    print_completion_age_profiles();
     print_surface_reuse_profiles();
     print_surface_damage_profiles();
 }

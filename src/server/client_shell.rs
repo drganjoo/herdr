@@ -28,6 +28,15 @@ pub(super) fn snapshot_with_completions(
     let completions = protocol::endpoint::EndpointAgentCompletions {
         boot_id: boot_id.to_owned(),
         revision,
+        completed_at_unix_ms: snapshot
+            .agents
+            .iter()
+            .filter_map(|agent| {
+                agent
+                    .completed_at_unix_ms
+                    .map(|time| (agent.pane_id.clone(), time))
+            })
+            .collect(),
         completions: snapshot
             .agents
             .iter()

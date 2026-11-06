@@ -1724,6 +1724,7 @@ impl AppState {
                     .is_some_and(|change| change.previous_agent_label != change.agent_label);
             if completion_reset {
                 terminal.last_agent_completion_seq = None;
+                terminal.last_agent_completed_at_unix_ms = None;
             }
             let managed_changed = terminal.reconcile_managed_agent_at(now, false);
             let suppress_acquisition_completion = terminal.finish_agent_process_acquisition();
@@ -1759,6 +1760,13 @@ impl AppState {
                 terminal.last_agent_completion_seq = (!suppress_completion
                     && is_completion_transition(&change))
                 .then_some(self.next_agent_state_change_seq);
+                terminal.last_agent_completed_at_unix_ms =
+                    terminal.last_agent_completion_seq.and_then(|_| {
+                        std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .ok()
+                            .and_then(|elapsed| u64::try_from(elapsed.as_millis()).ok())
+                    });
             }
         }
         let seen = self.apply_pane_state_change(ws_idx, pane_id, &change, suppress_completion)?;
@@ -3089,6 +3097,7 @@ mod tests {
         assert_eq!(terminal.state, AgentState::Idle);
         let pane = state.workspaces[0].panes.get(&pane_id).unwrap();
         assert!(pane.seen);
+        assert!(terminal.last_agent_completed_at_unix_ms.is_some());
     }
 
     #[test]

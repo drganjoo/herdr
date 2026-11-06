@@ -801,9 +801,18 @@ async fn completion_guard_endpoint_pairs_runtime_completions_with_snapshots() {
             completions.completions.get(&agent.pane_id).copied(),
             expected
         );
+        let runtime_agent = &server.app.session_snapshot().agents[0];
+        assert_eq!(runtime_agent.completion_seq, expected);
         assert_eq!(
-            server.app.session_snapshot().agents[0].completion_seq,
-            expected
+            runtime_agent.completed_at_unix_ms.is_some(),
+            expected.is_some()
+        );
+        assert_eq!(
+            completions
+                .completed_at_unix_ms
+                .get(&agent.pane_id)
+                .copied(),
+            runtime_agent.completed_at_unix_ms,
         );
     }
 }

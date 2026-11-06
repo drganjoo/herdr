@@ -134,6 +134,7 @@ fn agent_rows(
     active_endpoint_id: &ClientEndpointId,
     config: &ClientShellConfig,
 ) -> Vec<EndpointAgentRow> {
+    let now_ms = super::agent_sidebar::unix_now_ms();
     let mut rendered_rows = endpoints
         .iter()
         .filter_map(|endpoint| {
@@ -142,11 +143,13 @@ fn agent_rows(
                     .agents
                     .iter()
                     .filter_map(|agent| {
-                        super::agent_sidebar::agent_row(
+                        super::agent_sidebar::agent_row_with_completion(
                             snapshot,
                             &agent.pane_id,
                             config,
                             Some(&endpoint.label),
+                            endpoint.agent_presentation.completed_at(&agent.pane_id),
+                            now_ms,
                         )
                     })
                     .map(|agent| ((endpoint.endpoint_id.clone(), agent.pane_id.clone()), agent))

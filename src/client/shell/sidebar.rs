@@ -437,6 +437,11 @@ pub(crate) fn render_sidebar(
         config,
         state.agent_scroll,
         hits,
+        state
+            .endpoints
+            .iter()
+            .find(|endpoint| &endpoint.endpoint_id == state.active_endpoint_id)
+            .map(|endpoint| &endpoint.agent_presentation),
     );
 
     hits.sidebar_toggle = Rect::new(

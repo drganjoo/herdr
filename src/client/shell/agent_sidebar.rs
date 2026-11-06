@@ -15,6 +15,7 @@ pub(super) struct AgentRow {
     pub(super) status: crate::api::schema::AgentStatus,
     pub(super) focused: bool,
     pub(super) rows: Vec<Vec<crate::ui::ResolvedToken>>,
+    pub(super) recently_completed: bool,
 }
 
 pub(super) fn ordered_agent_pane_ids(
@@ -49,6 +50,8 @@ pub(super) fn ordered_agent_pane_ids(
         .collect()
 }
 
+// Keep the completion projection separate from the frozen snapshot and render hit state.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn render_agent_panel(
     buffer: &mut Buffer,
     area: Rect,
@@ -56,6 +59,7 @@ pub(super) fn render_agent_panel(
     config: &ClientShellConfig,
     agent_scroll: &mut usize,
     hits: &mut ShellHitMap,
+    presentation: Option<&super::endpoint_agent_state::EndpointAgentPresentation>,
 ) {
     if !render_agent_panel_header(
         buffer,
@@ -67,7 +71,20 @@ pub(super) fn render_agent_panel(
         return;
     }
 
-    let rows = agent_rows(snapshot, config, None);
+    let now_ms = unix_now_ms();
+    let rows = ordered_agent_pane_ids(snapshot, config.agent_panel_sort)
+        .into_iter()
+        .filter_map(|pane_id| {
+            agent_row_with_completion(
+                snapshot,
+                &pane_id,
+                config,
+                None,
+                presentation.and_then(|state| state.completed_at(&pane_id)),
+                now_ms,
+            )
+        })
+        .collect::<Vec<_>>();
     render_agent_list(
         buffer,
         area,
@@ -234,22 +251,23 @@ pub(super) fn render_agent_list<T>(
     }
 }
 
-pub(super) fn agent_rows(
-    snapshot: &ClientShellSnapshot,
-    config: &ClientShellConfig,
-    machine: Option<&str>,
-) -> Vec<AgentRow> {
-    ordered_agent_pane_ids(snapshot, config.agent_panel_sort)
-        .into_iter()
-        .filter_map(|pane_id| agent_row(snapshot, &pane_id, config, machine))
-        .collect()
-}
-
+#[cfg(test)]
 pub(super) fn agent_row(
     snapshot: &ClientShellSnapshot,
     pane_id: &str,
     config: &ClientShellConfig,
     machine: Option<&str>,
+) -> Option<AgentRow> {
+    agent_row_with_completion(snapshot, pane_id, config, machine, None, 0)
+}
+
+pub(super) fn agent_row_with_completion(
+    snapshot: &ClientShellSnapshot,
+    pane_id: &str,
+    config: &ClientShellConfig,
+    machine: Option<&str>,
+    completed_at: Option<u64>,
+    now_ms: u64,
 ) -> Option<AgentRow> {
     let agent = snapshot
         .agents
@@ -288,11 +306,14 @@ pub(super) fn agent_row(
         .get(status_text(agent.agent_status))
         .map(String::as_str)
         .unwrap_or_else(|| sidebar_status_text(agent.agent_status));
+    let age = completed_at.map(|time| now_ms.saturating_sub(time) / 1000);
+    let completion_label = age.map(|seconds| completion_text(agent.agent_status, seconds));
+    let state_text = completion_label.as_deref().unwrap_or(state_text);
     let canonical_agent = agent
         .agent
         .as_deref()
         .and_then(crate::detect::parse_agent_label);
-    let rows = crate::ui::sidebar_agent_rows(
+    let mut rows = crate::ui::sidebar_agent_rows(
         &config.agents,
         crate::ui::AgentTokenContext {
             machine,
@@ -317,11 +338,23 @@ pub(super) fn agent_row(
         },
         state_text,
     );
+    if completion_label.is_some()
+        && !rows
+            .iter()
+            .flatten()
+            .any(|token| matches!(token.kind, crate::ui::ResolvedTokenKind::StateText(_)))
+    {
+        rows.push(vec![crate::ui::ResolvedToken {
+            kind: crate::ui::ResolvedTokenKind::StateText(state_text.to_owned()),
+            style: Default::default(),
+        }]);
+    }
     Some(AgentRow {
         pane_id: agent.pane_id.clone(),
         status: agent.agent_status,
         focused: agent.focused,
         rows,
+        recently_completed: age.is_some_and(|seconds| seconds < 300),
     })
 }
 
@@ -347,6 +380,11 @@ pub(super) fn render_agent_row(
             .add_modifier(Modifier::BOLD)
     };
     let status_style = Style::default().fg(status_color(row.status, palette));
+    let status_style = if row.recently_completed {
+        status_style.add_modifier(Modifier::BOLD)
+    } else {
+        status_style
+    };
     let secondary = Style::default().fg(palette.overlay0);
     let icon = (
         status_icon(row.status, config.status_indicators),
@@ -399,5 +437,41 @@ fn sidebar_status_text(status: crate::api::schema::AgentStatus) -> &'static str 
         AgentStatus::Done => "done",
         AgentStatus::Working => "working",
         AgentStatus::Idle | AgentStatus::Unknown => "idle",
+    }
+}
+
+pub(super) fn unix_now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()
+        .and_then(|elapsed| u64::try_from(elapsed.as_millis()).ok())
+        .unwrap_or(0)
+}
+
+fn completion_text(status: crate::api::schema::AgentStatus, age_seconds: u64) -> String {
+    let age = match age_seconds {
+        0..60 => "just now".to_owned(),
+        60..3600 => format!("{}m ago", age_seconds / 60),
+        3600..86400 => format!("{}h ago", age_seconds / 3600),
+        _ => format!("{}d ago", age_seconds / 86400),
+    };
+    if status == crate::api::schema::AgentStatus::Done {
+        format!("done · {age}")
+    } else {
+        format!("finished {age}")
+    }
+}
+
+#[cfg(test)]
+mod completion_tests {
+    use super::*;
+
+    #[test]
+    fn completion_age_formats_boundaries() {
+        use crate::api::schema::AgentStatus;
+        assert_eq!(completion_text(AgentStatus::Done, 0), "done · just now");
+        assert_eq!(completion_text(AgentStatus::Idle, 120), "finished 2m ago");
+        assert_eq!(completion_text(AgentStatus::Idle, 3600), "finished 1h ago");
+        assert_eq!(completion_text(AgentStatus::Idle, 86400), "finished 1d ago");
     }
 }
